@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	// "bytes"
+	// "strings"
 	"time"
-	"bytes"
-	"strings"
+	// "os"
+	"io"
+	"bufio"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -26,6 +29,59 @@ type TestbedEntry struct {
 type TestbedData struct {
 	ContainerID string `json:"containerID"`
 	Data string `json:"data"`
+}
+
+func dbWrite(reader io.Reader, containerID string) {
+	svc := dynamodb.New(session.New(&aws.Config{
+			Region: aws.String("us-west-1"),
+		}))
+
+	scanner := bufio.NewScanner(reader)
+    for scanner.Scan() {
+    	dataBytes := scanner.Bytes()
+	    dataString := string(dataBytes[8:])
+        fmt.Printf("%s \n", dataString)
+
+		// create keys for testbed database
+		nodeNum := 1 // hardcoded node number for testing
+
+		month := time.Now().Unix() / (60*60*24*30)
+
+		partitionKey := fmt.Sprintf("%d.%d.dockerlogs", nodeNum, month)
+
+		sortKey := fmt.Sprintf("%d", time.Now().UnixNano())
+		fmt.Println(partitionKey, sortKey)
+		
+		// create database entry
+		tb := TestbedData {
+			ContainerID: containerID,
+			Data: dataString,
+		}
+
+		te := TestbedEntry {
+			Nodemonthcat: partitionKey,
+			Timestamp: sortKey,
+			Dockerlogs: tb,
+		}
+
+		// put data into testbed db
+		av, err := dynamodbattribute.MarshalMap(te)
+		fmt.Println(av)
+		if err != nil {
+			panic(err)
+		}
+		_, err = svc.PutItem(&dynamodb.PutItemInput{
+			TableName: aws.String("testbed"),
+			Item: av,
+		})
+
+		if err != nil {
+			panic(err)
+		}
+	}
+    if err := scanner.Err(); err != nil {
+    	panic(err)
+    }
 }
 func main() {
 	// initialize connection to container
@@ -52,7 +108,7 @@ func main() {
 			ShowStderr: true,
 			Timestamps: true,
 			Details: true,
-			Since: "30s",
+			Follow: true,
 		})
 	defer reader.Close()
 
@@ -60,65 +116,12 @@ func main() {
 	    panic(err)
 	}
 
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(reader)
-	dataBuf := new(bytes.Buffer)
-
-	lines := strings.Split(buf.String(), "\n")
-	for _, m := range lines[:len(lines)-1] {
-		temp := []byte(m)
-    	dataBuf.Write(temp[8:])
-    	dataBuf.WriteString("\n")
-	}	
-
-	dataString := dataBuf.String()
-	fmt.Println(dataString)
+	// stream logs to dbWrite() in real time
+	r, w := io.Pipe()
+	go dbWrite(r, containerID)
+	io.Copy(w, reader)
 	
-  	// connect to dynamo db
-	svc := dynamodb.New(session.New(&aws.Config{
-			Region: aws.String("us-west-1"),
-		}))
-
-	// create keys for testbed database
-	nodeNum := 1 // hardcoded node number for testing
-
-	month := time.Now().Unix() / (60*60*24*30)
-
-	partitionKey := fmt.Sprintf("%d.%d.dockerlogs", nodeNum, month)
-
-	sortKey := fmt.Sprintf("%d", time.Now().UnixNano())
-	fmt.Println(partitionKey, sortKey)
-	
-	// create database entry
-	tb := TestbedData {
-		ContainerID: containerID,
-		Data: dataString,
-	}
-
-	te := TestbedEntry {
-		Nodemonthcat: partitionKey,
-		Timestamp: sortKey,
-		Dockerlogs: tb,
-	}
-
-	// put data into testbed db
-	av, err := dynamodbattribute.MarshalMap(te)
-	fmt.Println("err", err)
-	fmt.Println(av)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	_, err = svc.PutItem(&dynamodb.PutItemInput{
-		TableName: aws.String("testbed"),
-		Item: av,
-	})
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
+	return
 	// // retrieve records to confirm they were added
 	// var records []TestbedEntry
 	// err = svc.ScanPages(&dynamodb.ScanInput{
