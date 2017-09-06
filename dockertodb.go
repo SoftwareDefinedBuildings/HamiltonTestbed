@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	// "bytes"
-	// "strings"
 	"time"
-	// "os"
 	"io"
 	"bufio"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -36,6 +34,12 @@ func dbWrite(reader io.Reader, containerID string) {
 			Region: aws.String("us-west-1"),
 		}))
 
+	// get node number
+	nodeNum := os.Getenv("NODE_NUM") // hardcoded node number for testing
+	if nodeNum == "" {
+		panic("cannot get node number from NODE_NUM")
+	}
+
 	scanner := bufio.NewScanner(reader)
     for scanner.Scan() {
     	dataBytes := scanner.Bytes()
@@ -43,11 +47,9 @@ func dbWrite(reader io.Reader, containerID string) {
         fmt.Printf("%s \n", dataString)
 
 		// create keys for testbed database
-		nodeNum := 1 // hardcoded node number for testing
-
 		month := time.Now().Unix() / (60*60*24*30)
 
-		partitionKey := fmt.Sprintf("%d.%d.dockerlogs", nodeNum, month)
+		partitionKey := fmt.Sprintf("%d.%s.dockerlogs", nodeNum, month)
 
 		sortKey := fmt.Sprintf("%d", time.Now().UnixNano())
 		fmt.Println(partitionKey, sortKey)
