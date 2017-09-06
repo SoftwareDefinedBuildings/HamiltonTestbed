@@ -35,16 +35,15 @@ func dbWrite(reader io.Reader, containerID string) {
 		}))
 
 	// get node number
-	nodeNum := os.Getenv("NODE_NUM") // hardcoded node number for testing
+	nodeNum := os.Getenv("NODENUM")
 	if nodeNum == "" {
-		panic("cannot get node number from NODE_NUM")
+		panic("cannot get node number from NODENUM")
 	}
 
 	scanner := bufio.NewScanner(reader)
     for scanner.Scan() {
     	dataBytes := scanner.Bytes()
 	    dataString := string(dataBytes[8:])
-        fmt.Printf("%s \n", dataString)
 
 		// create keys for testbed database
 		month := time.Now().Unix() / (60*60*24*30)
@@ -52,7 +51,6 @@ func dbWrite(reader io.Reader, containerID string) {
 		partitionKey := fmt.Sprintf("%d.%s.dockerlogs", nodeNum, month)
 
 		sortKey := fmt.Sprintf("%d", time.Now().UnixNano())
-		fmt.Println(partitionKey, sortKey)
 		
 		// create database entry
 		tb := TestbedData {
@@ -68,7 +66,6 @@ func dbWrite(reader io.Reader, containerID string) {
 
 		// put data into testbed db
 		av, err := dynamodbattribute.MarshalMap(te)
-		fmt.Println(av)
 		if err != nil {
 			panic(err)
 		}
@@ -87,8 +84,6 @@ func dbWrite(reader io.Reader, containerID string) {
 }
 func main() {
 	// initialize connection to container
-	// ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	// defer cancel()
 	ctx := context.Background()
   	cli, err := client.NewEnvClient()
   	if err != nil {
@@ -101,7 +96,6 @@ func main() {
 		panic(err)
 	}
 
-	// fmt.Println(containers[0].ID)
 	containerID := containers[0].ID
 
 	// connect to container and create container log reader
@@ -124,21 +118,4 @@ func main() {
 	io.Copy(w, reader)
 	
 	return
-	// // retrieve records to confirm they were added
-	// var records []TestbedEntry
-	// err = svc.ScanPages(&dynamodb.ScanInput{
-	//     TableName: aws.String("testbed"),
-	// }, func(page *dynamodb.ScanOutput, last bool) bool {
-	//     recs := []TestbedEntry{}
-
-	//     err := dynamodbattribute.UnmarshalListOfMaps(page.Items, &recs)
-	//     if err != nil {
-	//          panic(fmt.Sprintf("failed to unmarshal Dynamodb Scan Items, %v", err))
-	//     }
-
-	//     records = append(records, recs...)
-
-	//     return true // keep paging
-	// })
-	// fmt.Println(records);
 }
