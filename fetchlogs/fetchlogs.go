@@ -1,17 +1,24 @@
 package main
 
 import (
-  "fmt"
-  "os"
-  "time"
+    "fmt"
+    "os"
+    "time"
 
-  "github.com/urfave/cli"
+    "github.com/urfave/cli"
 
-  "github.com/aws/aws-sdk-go/aws"
-  "github.com/aws/aws-sdk-go/aws/session"
-  "github.com/aws/aws-sdk-go/aws/awserr"
-  "github.com/aws/aws-sdk-go/service/dynamodb"
+    "github.com/aws/aws-sdk-go/aws"
+    "github.com/aws/aws-sdk-go/aws/session"
+    "github.com/aws/aws-sdk-go/aws/awserr"
+    "github.com/aws/aws-sdk-go/service/dynamodb"
+    "github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+
 )
+
+type TestbedData struct {
+    ContainerID string `json:"containerID"`
+    Data string `json:"data"`
+}
 
 func main() {
     app := cli.NewApp()
@@ -19,10 +26,10 @@ func main() {
     app.Usage = "fetches Hamilton testbed logs"
     app.ArgsUsage = "nodeID"
     app.Action = func(c *cli.Context) error {
-        nodeID := string(c.Args().Get(0))
+        nodeID := c.Args().Get(0)
         if nodeID == "" {
-            fmt.Println("must specify node ID")
-          return nil
+            fmt.Println("Error: must specify node ID")
+            return nil
         }
 
         // connect to db
@@ -68,7 +75,12 @@ func main() {
             }
             return nil
         }
-        fmt.Println(result);
+        tb := TestbedData{}
+        for _, element := range result.Items {
+            dynamodbattribute.Unmarshal(element["dockerlogs"], &tb)
+            fmt.Println(tb.Data);
+        }
+        
         return nil
   }
 
