@@ -35,9 +35,9 @@ func dbWrite(reader io.Reader, containerID string) {
 		}))
 
 	// get node number
-	nodeNum := os.Getenv("NODENUM")
+	nodeNum := os.Getenv("NODEID")
 	if nodeNum == "" {
-		panic("cannot get node number from NODENUM")
+		panic("cannot get node number from NODEID")
 	}
 
 	scanner := bufio.NewScanner(reader)
