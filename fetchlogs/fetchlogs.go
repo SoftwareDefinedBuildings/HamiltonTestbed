@@ -19,7 +19,7 @@ func main() {
     app.Usage = "fetches Hamilton testbed logs"
     app.ArgsUsage = "nodeID"
     app.Action = func(c *cli.Context) error {
-        nodeID := c.Args().Get(0)
+        nodeID := string(c.Args().Get(0))
         if nodeID == "" {
             fmt.Println("must specify node ID")
           return nil
@@ -32,15 +32,19 @@ func main() {
 
         // query db
         month := time.Now().Unix() / (60*60*24*30)
-        partitionKey := fmt.Sprintf("%s.%s.dockerlogs", nodeID, month)
+        partitionKey := fmt.Sprintf("%s.%d.dockerlogs", nodeID, month)
+        fmt.Println(partitionKey)
         input := &dynamodb.QueryInput{
             ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
                 ":v1": {
                     S: aws.String(partitionKey),
                 },
             },
-            KeyConditionExpression: aws.String("Nodemonthcat = :v1"),
-            ProjectionExpression:   aws.String("Timestamp"),
+            // ExpressionAttributeNames: map[string]*string{
+            //     "#t": "Timestamp",
+            // },
+            KeyConditionExpression: aws.String("nodemonthcat = :v1"),
+            // ProjectionExpression:   aws.String("Timestamp"),
             TableName:              aws.String("testbed"),
         }
 
