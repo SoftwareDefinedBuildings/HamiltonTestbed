@@ -25,6 +25,26 @@ func main() {
     app.Name = "fetchlogs"
     app.Usage = "fetches Hamilton testbed logs"
     app.ArgsUsage = "nodeID"
+
+    // set date flags
+    var startDate, endDate string
+    form := "01/02/2006"
+    curDate := time.Now().Format(form)
+    app.Flags = []cli.Flag {
+    cli.StringFlag{
+          Name: "startDate, s",
+          Value: "01/01/1970",
+          Usage: "start date to view logs in mm/dd/yyyy format",
+          Destination: &startDate,
+        },
+    cli.StringFlag{
+          Name: "endDate, e",
+          Value: curDate,
+          Usage: "end date to view logs in mm/dd/yyyy format, inclusive of end date",
+          Destination: &endDate,
+        },
+    }
+
     app.Action = func(c *cli.Context) error {
         nodeID := c.Args().Get(0)
         if nodeID == "" {
@@ -37,21 +57,47 @@ func main() {
           Region: aws.String("us-west-1"),
         }))
 
+        // set time filters
+        startDay, e := time.Parse(form, startDate)
+        if e != nil {
+            fmt.Println(e.Error())
+            return nil
+        }
+        endDay, e := time.Parse(form, endDate)
+        if e != nil {
+            fmt.Println(e.Error())
+            return nil
+        }
+
+        // add one day to print all logs on the specified end date
+        endDay = endDay.AddDate(0, 0, 1)
+        fmt.Println(fmt.Sprintf("LOGS FOR NODEID %s BETWEEN %s AND %s", 
+            nodeID, startDay.String(), endDay.String()))
+
+        startTime := fmt.Sprintf("%d", startDay.UnixNano())
+        endTime := fmt.Sprintf("%d", endDay.UnixNano())
+
         // query db
+        tStr := "timestamp"
         month := time.Now().Unix() / (60*60*24*30)
         partitionKey := fmt.Sprintf("%s.%d.dockerlogs", nodeID, month)
-        fmt.Println(partitionKey)
         input := &dynamodb.QueryInput{
             ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
                 ":v1": {
                     S: aws.String(partitionKey),
                 },
+                ":v2": {
+                    S: aws.String(startTime),
+                },
+                ":v3": {
+                    S: aws.String(endTime),
+                },
             },
-            // ExpressionAttributeNames: map[string]*string{
-            //     "#t": "Timestamp",
-            // },
-            KeyConditionExpression: aws.String("nodemonthcat = :v1"),
-            // ProjectionExpression:   aws.String("Timestamp"),
+            ExpressionAttributeNames: map[string]*string{
+                "#t": &tStr,
+            },
+            KeyConditionExpression: aws.String("nodemonthcat = :v1 AND #t between :v2 and :v3"),
+            ProjectionExpression:   aws.String("dockerlogs"),
             TableName:              aws.String("testbed"),
         }
 
@@ -75,12 +121,19 @@ func main() {
             }
             return nil
         }
-        tb := TestbedData{}
-        for _, element := range result.Items {
-            dynamodbattribute.Unmarshal(element["dockerlogs"], &tb)
-            fmt.Println(tb.Data);
+
+        // print out results
+        if len(result.Items) == 0 {
+            fmt.Println("NO LOGS TO DISPLAY")
+        } else {
+            fmt.Println("BEGIN LOGS\n")
+            tb := TestbedData{}
+            for _, element := range result.Items {
+                dynamodbattribute.Unmarshal(element["dockerlogs"], &tb)
+                fmt.Println(tb.Data);
+            }
+            fmt.Println("END LOGS")
         }
-        
         return nil
   }
 
