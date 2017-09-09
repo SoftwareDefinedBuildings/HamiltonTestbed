@@ -4,6 +4,7 @@ import (
     "fmt"
     "os"
     "time"
+    "strings"
 
     "github.com/urfave/cli"
 
@@ -27,21 +28,16 @@ func main() {
     app.ArgsUsage = "nodeID"
 
     // set date flags
-    var startDate, endDate string
+    var date string
     form := "01/02/2006"
     curDate := time.Now().Format(form)
     app.Flags = []cli.Flag {
-    cli.StringFlag{
-          Name: "startDate, s",
-          Value: "01/01/1970",
-          Usage: "start date to view logs in mm/dd/yyyy format",
-          Destination: &startDate,
-        },
-    cli.StringFlag{
-          Name: "endDate, e",
-          Value: curDate,
-          Usage: "end date to view logs in mm/dd/yyyy format, inclusive of end date",
-          Destination: &endDate,
+    cli.StringFlag {
+        Name: "date, d",
+        Value: curDate,
+        Usage: `date or date range to view logs, mm/dd/yyyy format for a single date,
+            mm/dd/yyyy-mm/dd/yyyy format for date range, inclusive of end date`,
+        Destination: &date,
         },
     }
 
@@ -58,6 +54,16 @@ func main() {
         }))
 
         // set time filters
+        dates := strings.Split(date, "-")
+        if len(dates) < 1 || len(dates) > 2{
+            fmt.Println("Invalid date range")
+            return nil
+        }
+        startDate, endDate := dates[0], dates[0]
+        if len(dates) == 2 {
+            endDate = dates[1]
+        }
+
         startDay, e := time.Parse(form, startDate)
         if e != nil {
             fmt.Println(e.Error())
@@ -79,7 +85,7 @@ func main() {
 
         // query db
         tStr := "timestamp"
-        month := time.Now().Unix() / (60*60*24*30)
+        month := startDay.Unix() / (60*60*24*30)
         partitionKey := fmt.Sprintf("%s.%d.dockerlogs", nodeID, month)
         input := &dynamodb.QueryInput{
             ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
