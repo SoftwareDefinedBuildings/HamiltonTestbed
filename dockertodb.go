@@ -45,13 +45,15 @@ func dbWrite(reader io.Reader, containerID string) {
     	dataBytes := scanner.Bytes()
 	    dataString := string(dataBytes[8:])
 
+	    fmt.Println("putting in new data")
 		// create keys for testbed database
 		month := time.Now().Unix() / (60*60*24*30)
 
-		partitionKey := fmt.Sprintf("%d.%s.dockerlogs", nodeNum, month)
+		partitionKey := fmt.Sprintf("%s.%d.dockerlogs", nodeNum, month)
 
 		sortKey := fmt.Sprintf("%d", time.Now().UnixNano())
 		
+		fmt.Println(partitionKey)
 		// create database entry
 		tb := TestbedData {
 			ContainerID: containerID,

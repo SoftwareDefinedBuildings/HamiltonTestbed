@@ -85,62 +85,67 @@ func main() {
 
         // query db
         tStr := "timestamp"
-        month := startDay.Unix() / (60*60*24*30)
-        partitionKey := fmt.Sprintf("%s.%d.dockerlogs", nodeID, month)
-        input := &dynamodb.QueryInput{
-            ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-                ":v1": {
-                    S: aws.String(partitionKey),
-                },
-                ":v2": {
-                    S: aws.String(startTime),
-                },
-                ":v3": {
-                    S: aws.String(endTime),
-                },
-            },
-            ExpressionAttributeNames: map[string]*string{
-                "#t": &tStr,
-            },
-            KeyConditionExpression: aws.String("nodemonthcat = :v1 AND #t between :v2 and :v3"),
-            ProjectionExpression:   aws.String("dockerlogs"),
-            TableName:              aws.String("testbed"),
-        }
+        startMonth := startDay.Unix() / (60*60*24*30)
+        endMonth := endDay.Unix() / (60*60*24*30)
 
-        result, err := svc.Query(input)
-        if err != nil {
-            if aerr, ok := err.(awserr.Error); ok {
-                switch aerr.Code() {
-                case dynamodb.ErrCodeProvisionedThroughputExceededException:
-                    fmt.Println(dynamodb.ErrCodeProvisionedThroughputExceededException, aerr.Error())
-                case dynamodb.ErrCodeResourceNotFoundException:
-                    fmt.Println(dynamodb.ErrCodeResourceNotFoundException, aerr.Error())
-                case dynamodb.ErrCodeInternalServerError:
-                    fmt.Println(dynamodb.ErrCodeInternalServerError, aerr.Error())
-                default:
-                    fmt.Println(aerr.Error())
+        // loop through partition keys in the date range
+        for i := startMonth; i <= endMonth; i++ {
+
+            partitionKey := fmt.Sprintf("%s.%d.dockerlogs", nodeID, i)
+
+            input := &dynamodb.QueryInput{
+                ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+                    ":v1": {
+                        S: aws.String(partitionKey),
+                    },
+                    ":v2": {
+                        S: aws.String(startTime),
+                    },
+                    ":v3": {
+                        S: aws.String(endTime),
+                    },
+                },
+                ExpressionAttributeNames: map[string]*string{
+                    "#t": &tStr,
+                },
+                KeyConditionExpression: aws.String("nodemonthcat = :v1 AND #t between :v2 and :v3"),
+
+                ProjectionExpression:   aws.String("dockerlogs"),
+                TableName:              aws.String("testbed"),
+            }
+
+            result, err := svc.Query(input)
+            if err != nil {
+                if aerr, ok := err.(awserr.Error); ok {
+                    switch aerr.Code() {
+                    case dynamodb.ErrCodeProvisionedThroughputExceededException:
+                        fmt.Println(dynamodb.ErrCodeProvisionedThroughputExceededException, aerr.Error())
+                    case dynamodb.ErrCodeResourceNotFoundException:
+                        fmt.Println(dynamodb.ErrCodeResourceNotFoundException, aerr.Error())
+                    case dynamodb.ErrCodeInternalServerError:
+                        fmt.Println(dynamodb.ErrCodeInternalServerError, aerr.Error())
+                    default:
+                        fmt.Println(aerr.Error())
+                    }
+                } else {
+                    // Print the error, cast err to awserr.Error to get the Code and
+                    // Message from an error.
+                    fmt.Println(err.Error())
                 }
-            } else {
-                // Print the error, cast err to awserr.Error to get the Code and
-                // Message from an error.
-                fmt.Println(err.Error())
+                return nil
             }
-            return nil
+
+            // print out results
+            if len(result.Items) != 0 {
+                tb := TestbedData{}
+                for _, element := range result.Items {
+                    dynamodbattribute.Unmarshal(element["dockerlogs"], &tb)
+                    fmt.Println(tb.Data);
+                }
+            }
         }
 
-        // print out results
-        if len(result.Items) == 0 {
-            fmt.Println("NO LOGS TO DISPLAY")
-        } else {
-            fmt.Println("BEGIN LOGS\n")
-            tb := TestbedData{}
-            for _, element := range result.Items {
-                dynamodbattribute.Unmarshal(element["dockerlogs"], &tb)
-                fmt.Println(tb.Data);
-            }
-            fmt.Println("END LOGS")
-        }
-        return nil
+    return nil
   }
 
   app.Run(os.Args)
